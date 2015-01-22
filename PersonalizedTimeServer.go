@@ -45,14 +45,17 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 // if user goes to / or index.html
 func home(w http.ResponseWriter, req *http.Request){
 	//if there is a cookie
-	/*
-	_, ok := counter.m[GlobalName]
-	if (ok){
-		fmt.Fprint(w, "<html><body><p> Greetings,")
-		fmt.Fprint(w, GlobalName)
+	//grabbing name from broswer
+	cookie, _ := req.Cookie("UUID")
+	fmt.Println("cookie ")
+	fmt.Println(cookie.Value)
+	i, ok := counter.m[cookie.Value]
+	fmt.Println("Name: " + i)
+	fmt.Println(ok)
+	if ok && i != "" {
+		fmt.Fprint(w, "<html><body><p> Greetings, ")
+		fmt.Fprint(w, i)
 		fmt.Fprint(w, "</p></body></html>")
-		*/
-	if(false){
 	}else {
 		//if there isn't a cookie yet
 		fmt.Fprint(w, "<html><body><p><form action=\"login\"> What is your name, Earthling?")
@@ -75,14 +78,18 @@ func logout(w http.ResponseWriter, req *http.Request){
 // login
 func loginHandler(w http.ResponseWriter, req *http.Request){
 	name := req.FormValue("name")
-	redirectTarget :="/"
+	fmt.Println("path: " + req.URL.Path)
+	redirectTarget :="/index.html"
+	if req.URL.Path == "/login" {
+		redirectTarget = "/"
+	}
 	if name != "" {
 		value := getUniqueValue()
 		tempValue := string(value[:])
-		fmt.Println(tempValue)
+		fmt.Println("login handler" + tempValue)
 		
 		cookie := &http.Cookie{
-			Name: name,
+			Name: "UUID",
 			Value: strings.Trim(tempValue, "\n"),
 		}
 		http.SetCookie(w,cookie)
@@ -95,8 +102,6 @@ func loginHandler(w http.ResponseWriter, req *http.Request){
 		fmt.Fprint(w, "</p></body></html>")
 	}
 	http.Redirect(w,req,redirectTarget, 302)
-	// check if name is in cookie map
-	//
 }
 func getUniqueValue() []byte{
 	out, error := exec.Command("uuidgen").Output()
@@ -144,6 +149,7 @@ func main() {
 	flag.Parse()
 	http.HandleFunc("/time/", TimeServer)
 	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/index.html/login", loginHandler)
 	http.HandleFunc("/", home)
 	http.HandleFunc("/index.html/", home)
 	http.HandleFunc("/logout/", logout)
