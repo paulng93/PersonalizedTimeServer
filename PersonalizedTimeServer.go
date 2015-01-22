@@ -34,13 +34,21 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		errorHandler(w, req, http.StatusNotFound)
 		return
 	}
+	cookie, _ := req.Cookie("UUID")
+	name, ok := counter.m[cookie.Value]
 	//html code
 	fmt.Fprint(w, "<html><head><style> p{font-size: xx-large}")
 	fmt.Fprint(w, "span.time {color:red}")
 	fmt.Fprint(w, "</style></head><body><p> The time is now ")
 	fmt.Fprint(w, "<span class=\"time\">")
 	fmt.Fprint(w, time.Now().Format("3:04:04 PM"))
-	fmt.Fprint(w, "</span>.</p></body></html>")
+	if ok {
+		fmt.Fprint(w, "</span>, ")
+		fmt.Fprint(w, name)
+		fmt.Fprint(w, "</p></body></html>")
+	} else {
+		fmt.Fprint(w, "</span>.</p></body></html>")
+	}
 }
 // if user goes to / or index.html
 func home(w http.ResponseWriter, req *http.Request){
@@ -70,6 +78,13 @@ func logout(w http.ResponseWriter, req *http.Request){
 	if req.URL.Path != "/logout/" {
 		errorHandler(w, req, http.StatusNotFound)
 		return
+	}
+	cookie, _ := req.Cookie("UUID")
+	_, ok := counter.m[cookie.Value]
+	if ok {
+		counter.countersLock.RLock()
+		delete(counter.m,cookie.Value)
+		counter.countersLock.RUnlock()
 	}
 	fmt.Fprint(w, "<html><head><META http-equiv=\"refresh\" content=\"10;URL=/\">")
 	fmt.Fprint(w, "<body><p>Good-bye.</p></body></html>")
