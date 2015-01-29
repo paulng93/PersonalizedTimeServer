@@ -14,16 +14,13 @@ import "flag"
 import "os"
 import "strconv"
 import "time"
-import "sync"
 import "os/exec"
-import "strings"
+import "CookieJar"
 
 //variables used 
 var default_port = flag.String("port", "8080", "Default port number is 8080")
-var counter = struct{
-	countersLock sync.RWMutex
-	m map[string]string
-}{m: make(map[string]string)}
+//not sure if work yet
+var cookieJar = CookieJar.NewCookieJar()
 //--------------------------------------------------------------------------------------
 /**
  * TimeServer function is the recipent when user goes to /time
@@ -40,7 +37,7 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 	existCheck := false
 	temp2 := ""
 	if cookie != nil { // if cookie exist set flags
-		name, check := counter.m[cookie.Value]
+		name, check := cookieJar.GetValue(cookie.Value)
 		fmt.Println(name)
 		existCheck = check
 		temp2 = name
@@ -73,15 +70,15 @@ func home(w http.ResponseWriter, req *http.Request){
 	temp := false
 	//checking of cookie exist
 	if cookie != nil {
-		_, ok := counter.m[cookie.Value]
-		temp = ok
+		_, check := cookieJar.GetValue(cookie.Value)
+		temp = check
 	}
 	//only true if cookie exist AND is the correct cookie (in map)
 	if(temp){
-		i, ok := counter.m[cookie.Value]
-		if ok && i != "" {//last check to see if name exist
+		name, ok := cookieJar.GetValue(cookie.Value)
+		if ok && name != "" {//last check to see if name exist
 			fmt.Fprint(w, "<html><body><p> Greetings, ")
-			fmt.Fprint(w, i)
+			fmt.Fprint(w, name)
 			fmt.Fprint(w, "</p></body></html>")
 		}
 	}else {
@@ -102,16 +99,12 @@ func logout(w http.ResponseWriter, req *http.Request){
 	if req.URL.Path != "/logout/" {
 		errorHandler(w, req, http.StatusNotFound)
 		return
-	}//getting cookie
+	}//deleting cookie
 	cookie, _ := req.Cookie("UUID")
-	if cookie != nil {// cookie check
-		_, ok := counter.m[cookie.Value]
-		if ok {
-			counter.countersLock.RLock()
-			delete(counter.m,cookie.Value)
-			counter.countersLock.RUnlock()
-		}
+	if cookie != nil {
+		cookieJar.DeleteCookie(cookie.Value)
 	}
+	
 	fmt.Fprint(w, "<html><head><META http-equiv=\"refresh\" content=\"10;URL=/\">")
 	fmt.Fprint(w, "<body><p>Good-bye.</p></body></html>")
 }
@@ -125,20 +118,8 @@ func loginHandler(w http.ResponseWriter, req *http.Request){
 	name := req.FormValue("name")
 	redirectTarget :="/"
 	if name != "" { //make sure user has input a name
-		value := getUniqueValue() // generate UUID
-		tempValue := string(value[:]) // turn into string
-		//creating cookie
-		cookie := &http.Cookie{
-			Name: "UUID",
-			Value: strings.Trim(tempValue, "\n"),
-			Path: "/",
-		}
-		//set cookie
-		http.SetCookie(w,cookie)
-		
-		counter.countersLock.RLock()
-		counter.m[strings.Trim(tempValue, "\n")] = name
-		counter.countersLock.RUnlock()
+		temp := CookieJar.CreateCookie(w, name)
+		cookieJar.AddCookie(temp, name)
 	}else {// if user has not input a name
 		fmt.Fprint(w, "<html><body><p> C'mon, I need a name.")
 		fmt.Fprint(w, "</p></body></html>")
@@ -203,6 +184,7 @@ func main() {
 	http.HandleFunc("/index.html", home)
 	http.HandleFunc("/logout/", logout)
 	fmt.Println("SERVER ONLINE")
+	fmt.Printf(CookieJar.Reverse("!oG ,olleH"))
 	if !checkPort() {
 		fmt.Printf("Error trying to connect to privledged port\n")
 		os.Exit(404)
