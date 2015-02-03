@@ -8,7 +8,7 @@
 package main
 //imports for all packages used
 import "net/http"
-import "log"
+//import "log"
 import "fmt"
 import "flag"
 import "os"
@@ -16,11 +16,24 @@ import "strconv"
 import "time"
 import "os/exec"
 import "CookieJar"
+import log "github.com/cihub/seelog"
+import "html/template"
+import "path"
 
-//variables used 
+
+//flag variables 
 var default_port = flag.String("port", "8080", "Default port number is 8080")
-//not sure if work yet
+var versionNumber = flag.String("V", "Version #2", "Current Version number")
+//DEFAULT location set for my working environment 
+var template_Location = flag.String("templates","Home/go/src/templates", "This allows to find location of templates" )
+var logfile_Name = flag.String("log","DefaultLogName", " to specify the name of the log configuration file" )
+//Cookie jar for taking cookie out 
 var cookieJar = CookieJar.NewCookieJar()
+
+type Profile struct {
+	Name string
+	CurrentTime string
+}
 //--------------------------------------------------------------------------------------
 /**
  * TimeServer function is the recipent when user goes to /time
@@ -34,27 +47,31 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	cookie, _ := req.Cookie("UUID")
-	existCheck := false
-	temp2 := ""
+	//existCheck := false
+	//temp2 := ""
+	profile := Profile{"",time.Now().Format("3:04:04 PM")}
 	if cookie != nil { // if cookie exist set flags
 		name, check := cookieJar.GetValue(cookie.Value)
-		fmt.Println(name)
-		existCheck = check
-		temp2 = name
-		fmt.Println(check)
+		profile = Profile{name,time.Now().Format("3:04:04 PM")}
+		log.Info("Persons name is " + name)
+		value := "no"
+		if check {
+			value = "yes"
+		}
+		log.Info("Name Exist? " + value)
 	}
-	//html code
-	fmt.Fprint(w, "<html><head><style> p{font-size: xx-large}")
-	fmt.Fprint(w, "span.time {color:red}")
-	fmt.Fprint(w, "</style></head><body><p> The time is now ")
-	fmt.Fprint(w, "<span class=\"time\">")
-	fmt.Fprint(w, time.Now().Format("3:04:04 PM"))
-	if existCheck { //prints the name if cookie exist
-		fmt.Fprint(w, "</span>, ")
-		fmt.Fprint(w, temp2)
-		fmt.Fprint(w, "</p></body></html>")
-	} else {
-		fmt.Fprint(w, "</span>.</p></body></html>")
+	lp := path.Join(*template_Location, "layout.html")
+	fp := path.Join(*template_Location, "time.html")
+	tmpl, err := template.ParseFiles(lp, fp)
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, profile); err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 //--------------------------------------------------------------------------------------
@@ -68,6 +85,8 @@ func home(w http.ResponseWriter, req *http.Request){
 	//grabbing name from broswer
 	cookie,_ := req.Cookie("UUID")
 	temp := false
+	profile := Profile{"",""}
+	lp := path.Join(*template_Location, "layout.html")
 	//checking of cookie exist
 	if cookie != nil {
 		_, check := cookieJar.GetValue(cookie.Value)
@@ -77,15 +96,33 @@ func home(w http.ResponseWriter, req *http.Request){
 	if(temp){
 		name, ok := cookieJar.GetValue(cookie.Value)
 		if ok && name != "" {//last check to see if name exist
-			fmt.Fprint(w, "<html><body><p> Greetings, ")
-			fmt.Fprint(w, name)
-			fmt.Fprint(w, "</p></body></html>")
+			profile = Profile{name, ""}
+			fp := path.Join(*template_Location, "greeting.html")
+			tmpl, err := template.ParseFiles(lp, fp)
+			if err != nil {
+				log.Error(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := tmpl.Execute(w, profile); err != nil {
+				log.Error(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 		}
 	}else {
 		//if there isn't a cookie yet ask user for name and redirect to login
-		fmt.Fprint(w, "<html><body><p><form action=\"login\"> What is your name, Earthling?")
-		fmt.Fprint(w, "<input type=\"text\" name=\"name\" size=\"50\">")
-		fmt.Fprint(w, "<input type=\"submit\"></form></p></body></html>")
+		fp := path.Join(*template_Location, "loginform.html")
+		tmpl, err := template.ParseFiles(lp, fp)
+		if err != nil {
+			log.Error(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := tmpl.Execute(w, profile); err != nil {
+			log.Error(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 //--------------------------------------------------------------------------------------
@@ -104,9 +141,20 @@ func logout(w http.ResponseWriter, req *http.Request){
 	if cookie != nil {
 		cookieJar.DeleteCookie(cookie.Value)
 	}
-	
-	fmt.Fprint(w, "<html><head><META http-equiv=\"refresh\" content=\"10;URL=/\">")
-	fmt.Fprint(w, "<body><p>Good-bye.</p></body></html>")
+	profile := Profile{"",""}
+	lp := path.Join(*template_Location, "layout.html")
+	fp := path.Join(*template_Location, "logout.html")
+	tmpl, err := template.ParseFiles(lp, fp)
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, profile); err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 //--------------------------------------------------------------------------------------
 /**
@@ -117,12 +165,24 @@ func logout(w http.ResponseWriter, req *http.Request){
 func loginHandler(w http.ResponseWriter, req *http.Request){
 	name := req.FormValue("name")
 	redirectTarget :="/"
+	profile := Profile{"", ""}
 	if name != "" { //make sure user has input a name
 		temp := CookieJar.CreateCookie(w, name)
 		cookieJar.AddCookie(temp, name)
 	}else {// if user has not input a name
-		fmt.Fprint(w, "<html><body><p> C'mon, I need a name.")
-		fmt.Fprint(w, "</p></body></html>")
+		lp := path.Join(*template_Location, "layout.html")
+		fp := path.Join(*template_Location, "noName.html")
+		tmpl, err := template.ParseFiles(lp, fp)
+		if err != nil {
+			log.Error(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := tmpl.Execute(w, profile); err != nil {
+			log.Error(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 	http.Redirect(w,req,redirectTarget, 302)
 }
@@ -135,7 +195,7 @@ func loginHandler(w http.ResponseWriter, req *http.Request){
 func getUniqueValue() []byte{
 	out, error := exec.Command("uuidgen").Output()
 	if error != nil {
-		log.Fatal(error)
+		log.Error(error)
 	}
 	return out
 }
@@ -148,8 +208,20 @@ func getUniqueValue() []byte{
 func errorHandler(w http.ResponseWriter, req *http.Request, status int){
 	w.WriteHeader(status)
 	if status == http.StatusNotFound {
-		fmt.Fprint(w, "<html><body><p> These are not the URLs you're looking for.")
-		fmt.Fprint(w, "</p></body></html>")
+		profile := Profile{"", ""}
+		lp := path.Join(*template_Location, "layout.html")
+		fp := path.Join(*template_Location, "notFound.html")
+		tmpl, err := template.ParseFiles(lp, fp)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Error(err)
+			return
+		}
+
+		if err := tmpl.Execute(w, profile); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Error(err)
+		}
 	}
 }
 //--------------------------------------------------------------------------------------
@@ -164,7 +236,8 @@ func appendColon(temp string)string {
 func checkPort()bool {
 	i, err := strconv.Atoi(*default_port)
 	if err != nil {
-		fmt.Println(err)
+		log.Error(err)
+		//fmt.Println(err)
 	}
 	if i < 1024 {
 		return false
@@ -175,6 +248,8 @@ func checkPort()bool {
 //--------------------------------------------------------------------------------------
 
 func main() {
+	defer log.Flush()
+    log.Info("SERVER ONLINE!")
 	//create server
 	flag.Parse()
 	http.HandleFunc("/time/", TimeServer)
@@ -183,16 +258,14 @@ func main() {
 	http.HandleFunc("/", home)
 	http.HandleFunc("/index.html", home)
 	http.HandleFunc("/logout/", logout)
-	fmt.Println("SERVER ONLINE")
-	fmt.Printf(CookieJar.Reverse("!oG ,olleH"))
+	fmt.Println(*versionNumber)
 	if !checkPort() {
-		fmt.Printf("Error trying to connect to privledged port\n")
+		log.Critical("Error trying to connect to privledged port\n")
 		os.Exit(404)
 	}
 	err := http.ListenAndServe(appendColon(*default_port), nil)
 	if err != nil {
-		fmt.Printf("Error\n")
-		log.Fatal("ListenAndServe: ", err)
+		log.Critical("Server's ListenAndServer critical error")
 		os.Exit(404)		
 	}	
 }
