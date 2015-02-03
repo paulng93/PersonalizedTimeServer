@@ -8,13 +8,11 @@
 package main
 //imports for all packages used
 import "net/http"
-//import "log"
 import "fmt"
 import "flag"
 import "os"
 import "strconv"
 import "time"
-import "os/exec"
 import "CookieJar"
 import log "github.com/cihub/seelog"
 import "html/template"
@@ -29,7 +27,8 @@ var template_Location = flag.String("templates","Home/go/src/templates", "This a
 var logfile_Name = flag.String("log","DefaultLogName", " to specify the name of the log configuration file" )
 //Cookie jar for taking cookie out 
 var cookieJar = CookieJar.NewCookieJar()
-
+//profile structure is needed to be passed in for templates 
+// has 2 value name and current time
 type Profile struct {
 	Name string
 	CurrentTime string
@@ -47,12 +46,11 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	cookie, _ := req.Cookie("UUID")
-	//existCheck := false
-	//temp2 := ""
 	profile := Profile{"",time.Now().Format("3:04:04 PM")}
 	if cookie != nil { // if cookie exist set flags
 		name, check := cookieJar.GetValue(cookie.Value)
 		profile = Profile{name,time.Now().Format("3:04:04 PM")}
+		//logging info
 		log.Info("Persons name is " + name)
 		value := "no"
 		if check {
@@ -60,6 +58,7 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		}
 		log.Info("Name Exist? " + value)
 	}
+	//for templates
 	lp := path.Join(*template_Location, "layout.html")
 	fp := path.Join(*template_Location, "time.html")
 	tmpl, err := template.ParseFiles(lp, fp)
@@ -68,7 +67,6 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	if err := tmpl.Execute(w, profile); err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -141,7 +139,7 @@ func logout(w http.ResponseWriter, req *http.Request){
 	if cookie != nil {
 		cookieJar.DeleteCookie(cookie.Value)
 	}
-	profile := Profile{"",""}
+	profile := Profile{"",""} // using empty profile
 	lp := path.Join(*template_Location, "layout.html")
 	fp := path.Join(*template_Location, "logout.html")
 	tmpl, err := template.ParseFiles(lp, fp)
@@ -150,7 +148,6 @@ func logout(w http.ResponseWriter, req *http.Request){
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	if err := tmpl.Execute(w, profile); err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -178,26 +175,12 @@ func loginHandler(w http.ResponseWriter, req *http.Request){
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
 		if err := tmpl.Execute(w, profile); err != nil {
 			log.Error(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 	http.Redirect(w,req,redirectTarget, 302)
-}
-//--------------------------------------------------------------------------------------
-/**
- * GetUniqueValue : generate a UUID
- * Parameter none
- * Renturn byte array
- */
-func getUniqueValue() []byte{
-	out, error := exec.Command("uuidgen").Output()
-	if error != nil {
-		log.Error(error)
-	}
-	return out
 }
 //--------------------------------------------------------------------------------------
 /**
@@ -252,6 +235,7 @@ func main() {
     log.Info("SERVER ONLINE!")
 	//create server
 	flag.Parse()
+	//to handle different urls
 	http.HandleFunc("/time/", TimeServer)
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/index.html/login", loginHandler)
