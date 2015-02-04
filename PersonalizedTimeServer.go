@@ -18,13 +18,17 @@ import log "github.com/cihub/seelog"
 import "html/template"
 import "path"
 
-
+const (
+	logFilePath = "./ect/"
+	cssPath = "C:/Users/Paul/Documents/Home/go/src/css"
+	temp_Location = "Home/go/src/templates"
+	)
 //flag variables 
 var default_port = flag.String("port", "8080", "Default port number is 8080")
 var versionNumber = flag.String("V", "Version #2", "Current Version number")
 //DEFAULT location set for my working environment 
-var template_Location = flag.String("templates","Home/go/src/templates", "This allows to find location of templates" )
-var logfile_Name = flag.String("log","DefaultLogName", " to specify the name of the log configuration file" )
+var template_Location = flag.String("templates",temp_Location, "This allows to find location of templates" )
+var logfile_Name = flag.String("log",logFilePath + "timeserver.log", " to specify the name of the log configuration file" )
 //Cookie jar for taking cookie out 
 var cookieJar = CookieJar.NewCookieJar()
 //profile structure is needed to be passed in for templates 
@@ -32,7 +36,8 @@ var cookieJar = CookieJar.NewCookieJar()
 type Profile struct {
 	Name string
 	CurrentTime string
-}
+	LogPath string
+}//&Profile{LogPath : name}
 //--------------------------------------------------------------------------------------
 /**
  * TimeServer function is the recipent when user goes to /time
@@ -46,10 +51,10 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	cookie, _ := req.Cookie("UUID")
-	profile := Profile{"",time.Now().Format("3:04:04 PM")}
+	profile := Profile{"",time.Now().Format("3:04:04 PM"),""}
 	if cookie != nil { // if cookie exist set flags
 		name, check := cookieJar.GetValue(cookie.Value)
-		profile = Profile{name,time.Now().Format("3:04:04 PM")}
+		profile = Profile{name,time.Now().Format("3:04:04 PM"),""}
 		//logging info
 		log.Info("Persons name is " + name)
 		value := "no"
@@ -61,7 +66,8 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 	//for templates
 	lp := path.Join(*template_Location, "layout.html")
 	fp := path.Join(*template_Location, "time.html")
-	tmpl, err := template.ParseFiles(lp, fp)
+	headerPath := path.Join(*template_Location, "menu.html")
+	tmpl, err := template.ParseFiles(lp, fp, headerPath)
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -83,7 +89,7 @@ func home(w http.ResponseWriter, req *http.Request){
 	//grabbing name from broswer
 	cookie,_ := req.Cookie("UUID")
 	temp := false
-	profile := Profile{"",""}
+	//profile := Profile{"",""}
 	lp := path.Join(*template_Location, "layout.html")
 	//checking of cookie exist
 	if cookie != nil {
@@ -94,15 +100,16 @@ func home(w http.ResponseWriter, req *http.Request){
 	if(temp){
 		name, ok := cookieJar.GetValue(cookie.Value)
 		if ok && name != "" {//last check to see if name exist
-			profile = Profile{name, ""}
+			//profile = Profile{name, ""}
 			fp := path.Join(*template_Location, "greeting.html")
-			tmpl, err := template.ParseFiles(lp, fp)
+			headerPath := path.Join(*template_Location, "menu.html")
+			tmpl, err := template.ParseFiles(lp, fp, headerPath)
 			if err != nil {
 				log.Error(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if err := tmpl.Execute(w, profile); err != nil {
+			if err := tmpl.Execute(w, &Profile{Name : name}); err != nil {
 				log.Error(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -110,14 +117,15 @@ func home(w http.ResponseWriter, req *http.Request){
 	}else {
 		//if there isn't a cookie yet ask user for name and redirect to login
 		fp := path.Join(*template_Location, "loginform.html")
-		tmpl, err := template.ParseFiles(lp, fp)
+		headerPath := path.Join(*template_Location, "menu.html")
+		tmpl, err := template.ParseFiles(lp, fp, headerPath)
 		if err != nil {
 			log.Error(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if err := tmpl.Execute(w, profile); err != nil {
+		if err := tmpl.Execute(w, nil); err != nil {
 			log.Error(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -139,16 +147,16 @@ func logout(w http.ResponseWriter, req *http.Request){
 	if cookie != nil {
 		cookieJar.DeleteCookie(cookie.Value)
 	}
-	profile := Profile{"",""} // using empty profile
 	lp := path.Join(*template_Location, "layout.html")
 	fp := path.Join(*template_Location, "logout.html")
-	tmpl, err := template.ParseFiles(lp, fp)
+	headerPath := path.Join(*template_Location, "menu.html")
+	tmpl, err := template.ParseFiles(lp, fp, headerPath)
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := tmpl.Execute(w, profile); err != nil {
+	if err := tmpl.Execute(w, nil); err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -162,20 +170,20 @@ func logout(w http.ResponseWriter, req *http.Request){
 func loginHandler(w http.ResponseWriter, req *http.Request){
 	name := req.FormValue("name")
 	redirectTarget :="/"
-	profile := Profile{"", ""}
 	if name != "" { //make sure user has input a name
 		temp := CookieJar.CreateCookie(w, name)
 		cookieJar.AddCookie(temp, name)
 	}else {// if user has not input a name
 		lp := path.Join(*template_Location, "layout.html")
 		fp := path.Join(*template_Location, "noName.html")
-		tmpl, err := template.ParseFiles(lp, fp)
+		headerPath := path.Join(*template_Location, "menu.html")
+		tmpl, err := template.ParseFiles(lp, fp, headerPath)
 		if err != nil {
 			log.Error(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := tmpl.Execute(w, profile); err != nil {
+		if err := tmpl.Execute(w, nil); err != nil {
 			log.Error(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -191,17 +199,17 @@ func loginHandler(w http.ResponseWriter, req *http.Request){
 func errorHandler(w http.ResponseWriter, req *http.Request, status int){
 	w.WriteHeader(status)
 	if status == http.StatusNotFound {
-		profile := Profile{"", ""}
 		lp := path.Join(*template_Location, "layout.html")
 		fp := path.Join(*template_Location, "notFound.html")
-		tmpl, err := template.ParseFiles(lp, fp)
+		headerPath := path.Join(*template_Location, "menu.html")
+		tmpl, err := template.ParseFiles(lp, fp, headerPath)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Error(err)
 			return
 		}
 
-		if err := tmpl.Execute(w, profile); err != nil {
+		if err := tmpl.Execute(w, nil); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Error(err)
 		}
@@ -229,19 +237,56 @@ func checkPort()bool {
 	}
 }
 //--------------------------------------------------------------------------------------
+func loadAppConfig() {
+	testConfig := 
+		`<seelog>
+		  <outputs formatid="common">
+		    <filter levels="trace,debug,info,warn,error,critical">
+		      <file path="`+ *logfile_Name +`"/>
+		    </filter>
+		  </outputs>
+		  <formats>
+		    <format id="common" format="%Date%t[%LEVEL]%t%FullPath:%Func:%Line%t%Msg%n" />
+		  </formats>
+		</seelog>`
+
+	logger, err := log.LoggerFromConfigAsBytes([]byte(testConfig))
+	//fmt.Println(testConfig)
+	if err != nil {
+		fmt.Println("seelog error!")
+		fmt.Println(err)
+	}
+	
+	loggerErr := log.ReplaceLogger(logger)
+	
+	if loggerErr != nil {
+		fmt.Println(loggerErr)
+	}
+	log.Trace("Test message!")
+	doLog()
+	
+}
+
+func doLog() {
+	for i:=0; i < 5; i++ {
+		log.Tracef("%d", i)
+	}
+}
 
 func main() {
 	defer log.Flush()
+	loadAppConfig()	
     log.Info("SERVER ONLINE!")
 	//create server
 	flag.Parse()
-	//to handle different urls
+	//to handle different url
 	http.HandleFunc("/time/", TimeServer)
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/index.html/login", loginHandler)
 	http.HandleFunc("/", home)
 	http.HandleFunc("/index.html", home)
 	http.HandleFunc("/logout/", logout)
+	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir(cssPath))))
 	fmt.Println(*versionNumber)
 	if !checkPort() {
 		log.Critical("Error trying to connect to privledged port\n")
