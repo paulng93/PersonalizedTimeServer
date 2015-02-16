@@ -17,15 +17,17 @@ import "CookieJar"
 import log "github.com/cihub/seelog"
 import "html/template"
 import "path"
+import "strings"
 
 const (
 	logFilePath = "./ect/"
 	cssPath = "C:/Users/Paul/Documents/Home/go/src/css"
 	temp_Location = "Home/go/src/templates"
+	versionNo = "Version No 3"
 	)
 //flag variables 
 var default_port = flag.String("port", "8080", "Default port number is 8080")
-var versionNumber = flag.String("V", "Version #2", "Current Version number")
+var version = flag.String("V", "No", "Change to 'Yes' if you want to print")
 //DEFAULT location set for my working environment 
 var template_Location = flag.String("templates",temp_Location, "This allows to find location of templates" )
 var logfile_Name = flag.String("log",logFilePath + "timeserver.log", " to specify the name of the log configuration file" )
@@ -50,7 +52,7 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 		errorHandler(w, req, http.StatusNotFound)
 		return
 	}
-	cookie, _ := req.Cookie("UUID")
+	cookie := cookieJar.GetCookie(req, "UUID")
 	profile := Profile{"",time.Now().Format("3:04:04 PM"),""}
 	if cookie != nil { // if cookie exist set flags
 		name, check := cookieJar.GetValue(cookie.Value)
@@ -87,17 +89,16 @@ func TimeServer(w http.ResponseWriter, req *http.Request) {
 func home(w http.ResponseWriter, req *http.Request){
 	//if there is a cookie
 	//grabbing name from broswer
-	cookie,_ := req.Cookie("UUID")
-	temp := false
-	//profile := Profile{"",""}
+	cookie := cookieJar.GetCookie(req, "UUID")
+	checkCookie := false
 	lp := path.Join(*template_Location, "layout.html")
 	//checking of cookie exist
 	if cookie != nil {
 		_, check := cookieJar.GetValue(cookie.Value)
-		temp = check
+		checkCookie = check
 	}
 	//only true if cookie exist AND is the correct cookie (in map)
-	if(temp){
+	if(checkCookie){
 		name, ok := cookieJar.GetValue(cookie.Value)
 		if ok && name != "" {//last check to see if name exist
 			//profile = Profile{name, ""}
@@ -143,9 +144,9 @@ func logout(w http.ResponseWriter, req *http.Request){
 		errorHandler(w, req, http.StatusNotFound)
 		return
 	}//deleting cookie
-	cookie, _ := req.Cookie("UUID")
+	cookie := cookieJar.GetCookie(req, "UUID")
 	if cookie != nil {
-		cookieJar.DeleteCookie(cookie.Value)
+		cookieJar.DeleteCookie(w, cookie.Value)
 	}
 	lp := path.Join(*template_Location, "layout.html")
 	fp := path.Join(*template_Location, "logout.html")
@@ -171,8 +172,7 @@ func loginHandler(w http.ResponseWriter, req *http.Request){
 	name := req.FormValue("name")
 	redirectTarget :="/"
 	if name != "" { //make sure user has input a name
-		temp := CookieJar.CreateCookie(w, name)
-		cookieJar.AddCookie(temp, name)
+		cookieJar.CreateCookie(w, name)
 	}else {// if user has not input a name
 		lp := path.Join(*template_Location, "layout.html")
 		fp := path.Join(*template_Location, "noName.html")
@@ -273,9 +273,17 @@ func doLog() {
 	}
 }
 
+func doVersion(){
+	if(strings.EqualFold("Yes", *version)){
+		fmt.Print("This is currently Version ")
+		fmt.Println(versionNo)
+	}
+}
+
 func main() {
 	defer log.Flush()
 	loadAppConfig()	
+	doVersion()
     log.Info("SERVER ONLINE!")
 	//create server
 	flag.Parse()
@@ -287,7 +295,6 @@ func main() {
 	http.HandleFunc("/index.html", home)
 	http.HandleFunc("/logout/", logout)
 	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir(cssPath))))
-	fmt.Println(*versionNumber)
 	if !checkPort() {
 		log.Critical("Error trying to connect to privledged port\n")
 		os.Exit(404)
